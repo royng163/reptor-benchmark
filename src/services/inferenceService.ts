@@ -161,19 +161,13 @@ export class InferenceService {
       const out = this.model!.execute(tensor4d) as tf.Tensor;
       const transpose = tf.transpose(out, [0, 2, 1]);
 
-      const boxes = tf.tidy(() => {
-        const w = tf.slice(transpose, [0, 0, 2], [-1, -1, 1]);
-        const h = tf.slice(transpose, [0, 0, 3], [-1, -1, 1]);
-        const x1 = tf.sub(tf.slice(transpose, [0, 0, 0], [-1, -1, 1]), tf.div(w, 2));
-        const y1 = tf.sub(tf.slice(transpose, [0, 0, 1], [-1, -1, 1]), tf.div(h, 2));
-        return tf.squeeze(tf.concat([y1, x1, tf.add(y1, h), tf.add(x1, w)], 2));
-      }) as tf.Tensor2D;
-
+      // Find the prediction with the highest confidence score
       const scores = tf.squeeze(tf.slice(transpose, [0, 0, 4], [-1, -1, 1])) as tf.Tensor1D;
+      const topIdxTensor = tf.argMax(scores);
+      const topIdx = await topIdxTensor.data();
+
+      // Extract and reshape the keypoints for the best prediction
       const landmarks = tf.squeeze(tf.slice(transpose, [0, 0, 5], [-1, -1, -1])) as tf.Tensor2D;
-      const selected = await tf.image.nonMaxSuppressionAsync(boxes, scores, 50, 0.45, 0.3);
-      const idxArr = await selected.array();
-      const topIdx = idxArr[0];
       const kpTensor = tf.reshape(tf.gather(landmarks, topIdx), [17, 3]);
       const kpArr = (await kpTensor.array()) as number[][];
 
