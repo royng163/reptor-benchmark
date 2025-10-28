@@ -194,13 +194,13 @@ export default function EvaluationScreen() {
         <TensorCamera
           style={styles.camera}
           type={"front" as CameraType}
-          cameraTextureHeight={720}
-          cameraTextureWidth={1280}
           resizeHeight={modelInput.h}
           resizeWidth={modelInput.w}
           resizeDepth={3}
           onReady={handleTensorCameraStream}
           autorender={true}
+          cameraTextureWidth={modelInput.w}
+          cameraTextureHeight={modelInput.h}
           useCustomShadersToResize={false}
         />
         {/* Overlay second (on top) */}

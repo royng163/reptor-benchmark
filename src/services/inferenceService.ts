@@ -64,14 +64,12 @@ export class InferenceService {
         this.detector = await poseDetection.createDetector(poseDetection.SupportedModels.BlazePose, {
           runtime: "tfjs",
           modelType: "lite",
-          enableSmoothing: true,
         });
         break;
       }
       case "movenet": {
         this.detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
           modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
-          enableSmoothing: true,
         });
         break;
       }
@@ -88,16 +86,6 @@ export class InferenceService {
       }
     }
 
-    // Warm up detector once (compile shaders)
-    if (this.detector) {
-      const warm = tf.zeros([256, 256, 3]) as tf.Tensor3D;
-      try {
-        await this.detector.estimatePoses(warm, { flipHorizontal: true, maxPoses: 1 });
-      } finally {
-        warm.dispose();
-        await tf.nextFrame();
-      }
-    }
     this.currentModelId = modelId;
   }
 
