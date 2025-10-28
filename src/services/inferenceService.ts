@@ -76,7 +76,7 @@ export class InferenceService {
         break;
       }
       case "yolo": {
-        const modelJson = require(`../../assets/models/yolo/model.json`);
+        const modelJson = require(`../../assets/models/yolo/model`);
         const modelWeights = [
           require(`../../assets/models/yolo/group1-shard1of3.bin`),
           require(`../../assets/models/yolo/group1-shard2of3.bin`),
@@ -117,6 +117,9 @@ export class InferenceService {
 
     const [srcH, srcW] = input.shape;
     const poses = await this.detector!.estimatePoses(input, { flipHorizontal: true, maxPoses: 1 });
+
+    // Debug: log keypoints
+    console.log("Keypoints:", poses);
 
     const t1 = performance.now();
     this.totalInferenceTime += t1 - t0;
