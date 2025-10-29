@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "fitness-coach-benchmark",
-    "slug": "fitness-coach-benchmark",
+    "name": "reptor-benchmark",
+    "slug": "reptor-benchmark",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -21,10 +21,25 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.reptorbenchmark"
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "react-native-fast-tflite",
+        {
+          "enableAndroidGpuLibraries": ["libOpenCL.so", "libOpenCL-pixel.so", "libGLES_mali.so", "libPVROCL.so"]
+        }
+      ],
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "$(PRODUCT_NAME) needs access to your Camera."
+        }
+      ]
+    ]
   }
 }
