@@ -68,9 +68,16 @@ export class InferenceService {
         break;
       }
       case "movenet": {
-        this.detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
-          modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
-        });
+        // this.detector = await poseDetection.createDetector(poseDetection.SupportedModels.MoveNet, {
+        //   modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING,
+        // });
+        const modelJson = require(`../../assets/models/movenet/model`);
+        const modelWeights = [
+          require(`../../assets/models/movenet/group1-shard1of2.bin`),
+          require(`../../assets/models/movenet/group1-shard2of2.bin`),
+        ];
+
+        this.model = await tf.loadGraphModel(bundleResourceIO(modelJson, modelWeights));
         break;
       }
       case "yolo": {
@@ -92,22 +99,45 @@ export class InferenceService {
   async runInference(input: tf.Tensor3D): Promise<any> {
     const t0 = performance.now();
 
+    let res: PoseResult;
     if (this.currentModelId === "yolo") {
-      const res = await this.runModelInference(input);
+      res = await this.runYolo11Inference(input);
+    } else if (this.currentModelId === "movenet") {
+      res = await this.runMovenetInference(input);
+    } else {
+      const [srcH, srcW] = input.shape;
+      const poses = await this.detector!.estimatePoses(input, { flipHorizontal: true, maxPoses: 1 });
+
       const t1 = performance.now();
       this.totalInferenceTime += t1 - t0;
       this.frameCount += 1;
       const elapsed = (performance.now() - this.sessionStartTime) / 1000;
       const fps = elapsed > 0 ? this.frameCount / elapsed : 0;
       const avgInferenceTime = this.totalInferenceTime / this.frameCount;
-      return { ...res, fps, avgInferenceTime };
+
+      if (!poses || poses.length === 0) {
+        return { keypoints: [], keypoints3D: [], fps, avgInferenceTime, srcWidth: srcW, srcHeight: srcH };
+      }
+
+      const p = poses[0];
+      const keypoints = p.keypoints.map((kp) => ({
+        x: kp.x,
+        y: kp.y,
+        z: kp.z ?? undefined,
+        visibility: kp.score,
+        name: kp.name,
+      }));
+      const keypoints3D =
+        p.keypoints3D?.map((kp) => ({
+          x: kp.x,
+          y: kp.y,
+          z: kp.z ?? undefined,
+          visibility: kp.score,
+          name: kp.name,
+        })) ?? [];
+
+      return { keypoints, keypoints3D, fps, avgInferenceTime, srcWidth: srcW, srcHeight: srcH };
     }
-
-    const [srcH, srcW] = input.shape;
-    const poses = await this.detector!.estimatePoses(input, { flipHorizontal: true, maxPoses: 1 });
-
-    // Debug: log keypoints
-    console.log("Keypoints:", poses);
 
     const t1 = performance.now();
     this.totalInferenceTime += t1 - t0;
@@ -115,32 +145,41 @@ export class InferenceService {
     const elapsed = (performance.now() - this.sessionStartTime) / 1000;
     const fps = elapsed > 0 ? this.frameCount / elapsed : 0;
     const avgInferenceTime = this.totalInferenceTime / this.frameCount;
-
-    if (!poses || poses.length === 0) {
-      return { keypoints: [], keypoints3D: [], fps, avgInferenceTime, srcWidth: srcW, srcHeight: srcH };
-    }
-
-    const p = poses[0];
-    const keypoints = p.keypoints.map((kp) => ({
-      x: kp.x,
-      y: kp.y,
-      z: kp.z ?? undefined,
-      visibility: kp.score,
-      name: kp.name,
-    }));
-    const keypoints3D =
-      p.keypoints3D?.map((kp) => ({
-        x: kp.x,
-        y: kp.y,
-        z: kp.z ?? undefined,
-        visibility: kp.score,
-        name: kp.name,
-      })) ?? [];
-
-    return { keypoints, keypoints3D, fps, avgInferenceTime, srcWidth: srcW, srcHeight: srcH };
+    return { ...res, fps, avgInferenceTime };
   }
 
-  private async runModelInference(input: tf.Tensor3D): Promise<PoseResult> {
+  private async runMovenetInference(input: tf.Tensor3D): Promise<PoseResult> {
+    const INPUT_SIZE = 192; // For MoveNet Single-Pose Lightning
+    const [srcH, srcW] = input.shape;
+
+    const tensor4d = tf.tidy(() => {
+      const resized = tf.image.resizeBilinear(input, [INPUT_SIZE, INPUT_SIZE], true);
+      const int32 = resized.toInt();
+      return tf.expandDims(int32, 0) as tf.Tensor4D;
+    });
+
+    try {
+      const out = this.model!.execute(tensor4d) as tf.Tensor;
+      const kptsTensor = tf.squeeze(out, [0, 1]); // Shape: [1, 1, 17, 3] -> [17, 3]
+      const kptsArr = (await kptsTensor.array()) as number[][];
+
+      const kpts: Keypoint[] = kptsArr.map(([y, x, v]) => ({
+        x: x * srcW,
+        y: y * srcH,
+        visibility: v,
+      }));
+
+      kptsTensor.dispose();
+      out.dispose();
+
+      return { keypoints: kpts, keypoints3D: [], srcWidth: srcW, srcHeight: srcH };
+    } finally {
+      tensor4d.dispose();
+      await tf.nextFrame();
+    }
+  }
+
+  private async runYolo11Inference(input: tf.Tensor3D): Promise<PoseResult> {
     const INPUT_SIZE = 640;
     const { tensor: frameTensor, width: srcW, height: srcH, dispose } = await this.prepareInputTensor(input);
 

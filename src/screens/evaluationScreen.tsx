@@ -23,6 +23,19 @@ export default function EvaluationScreen() {
   const cameraContainerRef = useRef<View | null>(null);
   const [overlayRect, setOverlayRect] = useState({ x: 0, y: 0, width: 0, height: 0 });
 
+  // Refs to store latest results without triggering re-renders
+  const latestResults = useRef<{
+    keypoints: Keypoint[];
+    fps: number;
+    avgInferenceTime: number;
+    srcDims: { w: number; h: number };
+  }>({
+    keypoints: [],
+    fps: 0,
+    avgInferenceTime: 0,
+    srcDims: { w: 1, h: 1 },
+  });
+
   // Pick a light input size per model to reduce work
   const modelInput = React.useMemo(() => {
     switch (model) {
@@ -64,6 +77,26 @@ export default function EvaluationScreen() {
     };
   }, []);
 
+  // This effect updates the UI at a lower frequency (e.g., 4-5 times per second)
+  useEffect(() => {
+    let uiUpdateInterval: NodeJS.Timeout;
+
+    if (isEvaluating) {
+      uiUpdateInterval = setInterval(() => {
+        setKeypoints(latestResults.current.keypoints);
+        setFps(latestResults.current.fps);
+        setAvgInferenceTime(latestResults.current.avgInferenceTime);
+        setSrcDims(latestResults.current.srcDims);
+      }, 1000); // Update UI every 1000ms
+    }
+
+    return () => {
+      if (uiUpdateInterval) {
+        clearInterval(uiUpdateInterval);
+      }
+    };
+  }, [isEvaluating]);
+
   // This effect now controls the entire evaluation loop
   useEffect(() => {
     const loop = async () => {
@@ -78,11 +111,12 @@ export default function EvaluationScreen() {
         tf.dispose(nextImageTensor);
 
         if (result) {
-          setKeypoints(result.keypoints || []);
-          setFps(result.fps || 0);
-          setAvgInferenceTime(result.avgInferenceTime || 0);
+          // Store results in refs instead of state to avoid re-renders in the loop
+          latestResults.current.keypoints = result.keypoints || [];
+          latestResults.current.fps = result.fps || 0;
+          latestResults.current.avgInferenceTime = result.avgInferenceTime || 0;
           if (result.srcWidth && result.srcHeight) {
-            setSrcDims({ w: result.srcWidth, h: result.srcHeight });
+            latestResults.current.srcDims = { w: result.srcWidth, h: result.srcHeight };
           }
         }
       }
@@ -101,6 +135,11 @@ export default function EvaluationScreen() {
         cancelAnimationFrame(rafId.current);
         rafId.current = null;
       }
+      // Clear latest results when stopping
+      latestResults.current = { keypoints: [], fps: 0, avgInferenceTime: 0, srcDims: { w: 1, h: 1 } };
+      setKeypoints([]);
+      setFps(0);
+      setAvgInferenceTime(0);
     }
   }, [isEvaluating]);
 
