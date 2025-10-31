@@ -8,9 +8,7 @@ The app measures and displays real-time Frames Per Second (FPS) and average infe
 
 - **Real-time Inference:** Runs pose estimation models on the live camera feed.
 - **Multiple Model Support:** Easily switch between different TFLite models (YOLO, MoveNet, BlazePose).
-- **Performance Metrics:** Displays live FPS and average inference time.
 - **UI Thread Processing:** Utilizes Vision Camera Frame Processors to run inference synchronously for maximum speed.
-- **Optimized UI:** Uses `react-native-reanimated` to render keypoints and display stats without blocking the JS thread.
 - **Hardware Acceleration:** Configured to use the NNAPI delegate for hardware-accelerated inference.
 
 ## Benchmark Results
@@ -52,7 +50,7 @@ The following benchmarks were run on an **Android phone with a MediaTek Dimensit
 1.  **Clone the repository:**
 
     ```bash
-    git clone <your-repo-url>
+    git clone https://github.com/royng163/reptor-benchmark.git
     cd reptor-benchmark
     ```
 
