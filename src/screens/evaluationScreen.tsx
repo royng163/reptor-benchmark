@@ -22,6 +22,7 @@ export default function EvaluationScreen() {
   const imageIterator = useRef<IterableIterator<tf.Tensor3D> | null>(null);
   const cameraContainerRef = useRef<View | null>(null);
   const [overlayRect, setOverlayRect] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const evaluationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Refs to store latest results without triggering re-renders
   const latestResults = useRef<{
@@ -74,6 +75,9 @@ export default function EvaluationScreen() {
       if (rafId.current) {
         cancelAnimationFrame(rafId.current);
       }
+      if (evaluationTimeoutRef.current) {
+        clearTimeout(evaluationTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -121,6 +125,11 @@ export default function EvaluationScreen() {
         }
       }
 
+      console.log(
+        `FPS: ${latestResults.current.fps.toFixed(
+          2
+        )}, Avg Inference Time: ${latestResults.current.avgInferenceTime.toFixed(2)} ms`
+      );
       rafId.current = requestAnimationFrame(loop);
     };
 
@@ -162,16 +171,34 @@ export default function EvaluationScreen() {
   }, []);
 
   const toggleEvaluation = () => {
-    if (!model) {
-      setStatus("Please load a model first.");
-      return;
+    if (isEvaluating) {
+      // If currently evaluating, stop it manually
+      if (evaluationTimeoutRef.current) {
+        clearTimeout(evaluationTimeoutRef.current);
+        evaluationTimeoutRef.current = null;
+      }
+      setIsEvaluating(false);
+    } else {
+      // If not evaluating, start it
+      if (!model) {
+        setStatus("Please load a model first.");
+        return;
+      }
+      if (!imageIterator.current) {
+        setStatus("Camera is not ready yet.");
+        return;
+      }
+      console.log(`Toggling evaluation, current state: ${isEvaluating}`);
+      setIsEvaluating(true);
+
+      // Set a timer to stop the evaluation automatically after the specified period
+      const periodSeconds = 10;
+      evaluationTimeoutRef.current = setTimeout(() => {
+        setIsEvaluating(false);
+        evaluationTimeoutRef.current = null;
+        console.log(`Evaluation stopped automatically after ${periodSeconds} seconds.`);
+      }, periodSeconds * 1000);
     }
-    if (!imageIterator.current) {
-      setStatus("Camera is not ready yet.");
-      return;
-    }
-    console.log(`Toggling evaluation, current state: ${isEvaluating}`);
-    setIsEvaluating((prev) => !prev);
   };
 
   const renderKeypoints = () => {
