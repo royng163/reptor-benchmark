@@ -22,6 +22,7 @@ export default function EvaluationScreen() {
 
   const cameraRef = useRef<Camera | null>(null);
   const cameraContainerRef = useRef<View | null>(null);
+  const evaluationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice("front") ?? useCameraDevice("back");
@@ -79,6 +80,13 @@ export default function EvaluationScreen() {
         setStatus("Camera permission denied.");
       }
     })();
+
+    // Cleanup timeout on unmount
+    return () => {
+      if (evaluationTimeoutRef.current) {
+        clearTimeout(evaluationTimeoutRef.current);
+      }
+    };
   }, []);
 
   const handleConfigChange = useCallback(
@@ -97,19 +105,38 @@ export default function EvaluationScreen() {
   );
 
   const toggleEvaluation = () => {
-    // Start evaluation: check for prerequisites
-    if (!selectedModel) {
-      setStatus("Please load a model first.");
-      return;
-    }
-    if (!device) {
-      setStatus("Camera is not ready yet.");
-      return;
-    }
+    if (isEvaluating) {
+      // If currently evaluating, stop it manually
+      if (evaluationTimeoutRef.current) {
+        clearTimeout(evaluationTimeoutRef.current);
+        evaluationTimeoutRef.current = null;
+      }
+      setIsEvaluating(false);
+    } else {
+      // If not evaluating, start it
+      if (!selectedModel) {
+        setStatus("Please load a model first.");
+        return;
+      }
+      if (!device) {
+        setStatus("Camera is not ready yet.");
+        return;
+      }
 
-    // Reset stats and start evaluation
-    statsRef.current = { frameCount: 0, sessionStart: 0, totalMs: 0, lastFrameTs: 0, lastUpdate: 0 };
-    setIsEvaluating((value) => !value);
+      // Reset stats and start evaluation
+      statsRef.current = { frameCount: 0, sessionStart: 0, totalMs: 0, lastFrameTs: 0, lastUpdate: 0 };
+      setIsEvaluating(true);
+
+      // Set a timer to stop the evaluation automatically after the specified period
+      const periodSeconds = 10;
+      if (!isNaN(periodSeconds) && periodSeconds > 0) {
+        evaluationTimeoutRef.current = setTimeout(() => {
+          setIsEvaluating(false);
+          evaluationTimeoutRef.current = null;
+          console.log(`Evaluation stopped automatically after ${periodSeconds} seconds.`);
+        }, periodSeconds * 1000);
+      }
+    }
   };
 
   // Frame processor: resize -> runSync -> interpret -> send keypoints to JS
@@ -122,13 +149,13 @@ export default function EvaluationScreen() {
       }
 
       // 2. Throttle frames to avoid overloading the CPU
-      const targetFps = 24;
-      const tsUs = frame?.timestamp ?? 0;
-      const minDeltaUs = 1e6 / targetFps;
-      if (statsRef.current.lastFrameTs > 0 && tsUs - statsRef.current.lastFrameTs < minDeltaUs) {
-        return;
-      }
-      statsRef.current.lastFrameTs = tsUs;
+      // const targetFps = 24;
+      // const tsUs = frame?.timestamp ?? 0;
+      // const minDeltaUs = 1e6 / targetFps;
+      // if (statsRef.current.lastFrameTs > 0 && tsUs - statsRef.current.lastFrameTs < minDeltaUs) {
+      //   return;
+      // }
+      // statsRef.current.lastFrameTs = tsUs;
 
       // 3. Check if model is loaded
       const model = tflite?.state === "loaded" ? tflite.model : undefined;
